@@ -240,7 +240,7 @@ class DDImporter extends FormApplication {
         await DDImporter.image2Canvas(mycanvas, f, image_type, size.x, size.y)
       }
       ui.notifications.notify("Uploading image ....")
-      if (toWebp) 
+      if (toWebp)
       {
         image_type = 'webp';
       }
@@ -342,7 +342,7 @@ class DDImporter extends FormApplication {
     DDImporter.checkFidelity(html)
     DDImporter.checkSource(html)
     DDImporter.checkWebp(html)
-	
+
 
 
     html.find(".path-input").keyup(ev => DDImporter.checkPath(html))
@@ -354,7 +354,7 @@ class DDImporter extends FormApplication {
     html.find(".add-file").click(async ev => {
       var newFile = $(`
       <div class="file-input" style="width: 80%; display:flex; align-items: center; margin-bottom: 10px;">
-        <input class="file-input" type='file' name='file${this.fileCounter}' accept=".dd2vtt,.df2vtt,.uvtt" /> 
+        <input class="file-input" type='file' name='file${this.fileCounter}' accept=".dd2vtt,.df2vtt,.uvtt" />
         <a class="remove-file"><i class="fa-solid fa-xmark"></i></a>
       </div>`)
 
@@ -390,7 +390,7 @@ class DDImporter extends FormApplication {
     {
       html.find(".multi-mode-section")[0].style.display = ""
     }
-    else 
+    else
     {
       html.find(".multi-mode-section")[0].style.display = "none"
     }
@@ -414,7 +414,7 @@ class DDImporter extends FormApplication {
       html.find(".warning.fidelity")[0].style.display = "none"
 
   }
-  
+
   static checkWebp(html) {
     if (html.find("[name='convert-to-webp']")[0].checked) {
       html.find(".conversion-quality")[0].style.display = ""
@@ -462,7 +462,7 @@ class DDImporter extends FormApplication {
     return btoa(result);
   }
 
-  
+
   static Uint8ToBlob(u8Arr, type) {
     return new Blob([u8Arr], {type : "image/" + type});
   }
@@ -732,7 +732,7 @@ class DDImporter extends FormApplication {
 
   static GetDoors(file, scene, offset, pixelsPerGrid) {
     let doors = [];
-    let ddDoors = file.portals;
+    let portals = file.portals;
     let sceneDimensions = scene.getDimensions()
     let offsetX = sceneDimensions.sceneX
     let offsetY = sceneDimensions.sceneY
@@ -740,23 +740,91 @@ class DDImporter extends FormApplication {
     let originY = file.resolution.map_origin.y
 
     if (offset != 0) {
-      ddDoors = this.makeOffsetWalls(ddDoors, offset)
+      portals = this.makeOffsetWalls(portals, offset)
     }
-    for (let door of ddDoors) {
+    for (let portal of portals) {
       try {
-
-        doors.push(new WallDocument({
-          c: [
-            ((door.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
-            ((door.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
-            ((door.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
-            ((door.bounds[1].y - originY) * pixelsPerGrid) + offsetY
-          ],
-          door: game.settings.get("dd-import", "openableWindows") ? 1 : (door.closed ? 1 : 0), // If openable windows - all portals should be doors, otherwise, only portals that "block light" should be openable (doors)
-          light : door.closed ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.PROXIMITY, 
-          sight : door.closed ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.PROXIMITY,
-          threshold : door.closed ? {} : {attenuation : true, light : 10, sight : 10} 
-        }))   // Proximity type if door.closed = false (assumes they are windows)
+        if (portal.type == "door" || (portal.type === undefined && portal.openable === true)) {
+          // Explicit doors.
+          doors.push(new WallDocument({
+            c: [
+              ((portal.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
+              ((portal.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[1].y - originY) * pixelsPerGrid) + offsetY
+            ],
+            door : portal.hidden === true ? CONST.WALL_DOOR_TYPES.SECRET : CONST.WALL_DOOR_TYPES.DOOR,
+            ds : portal.locked === true ? CONST.WALL_DOOR_STATES.LOCKED : (portal.closed !== false ? CONST.WALL_DOOR_STATES.CLOSED : CONST.WALL_DOOR_STATES.OPEN),
+            move : CONST.WALL_MOVEMENT_TYPES.NORMAL,
+            dir : (portal.block_left !== false && portal.block_right !== false) ? CONST.WALL_DIRECTIONS.BOTH : (portal.block_left ? CONST.WALL_DIRECTIONS.LEFT : CONST.WALL_DIRECTIONS.RIGHT),
+            light : portal.block_light  === false ? CONST.WALL_SENSE_TYPES.NONE : CONST.WALL_SENSE_TYPES.NORMAL,
+            sight : portal.block_vision === false ? CONST.WALL_SENSE_TYPES.NONE : CONST.WALL_SENSE_TYPES.NORMAL,
+            sound : portal.block_sound  === false ? CONST.WALL_SENSE_TYPES.NONE : CONST.WALL_SENSE_TYPES.NORMAL,
+          }))
+        } else if (portal.type == "window" || (portal.type === undefined && portal.block_move === true)) {
+          // Explicit windows.
+          doors.push(new WallDocument({
+            c: [
+              ((portal.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
+              ((portal.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[1].y - originY) * pixelsPerGrid) + offsetY
+            ],
+            door : (portal.openable || game.settings.get("dd-import", "openableWindows")) ? CONST.WALL_DOOR_TYPES.DOOR : CONST.WALL_DOOR_TYPES.NONE,
+            move : CONST.WALL_MOVEMENT_TYPES.NORMAL,
+            dir : (portal.block_left !== false && portal.block_right !== false) ? CONST.WALL_DIRECTIONS.BOTH : (portal.block_left ? CONST.WALL_DIRECTIONS.LEFT : CONST.WALL_DIRECTIONS.RIGHT),
+            light : portal.block_light  === true  ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+            sight : portal.block_vision === true  ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.PROXIMITY,
+            sound : portal.block_sound  === false ? CONST.WALL_SENSE_TYPES.NONE   : CONST.WALL_SENSE_TYPES.NORMAL,
+            threshold : {attenuation : true, light : 10, sight : 10}
+          }))
+        } else if (portal.type == "passage" || (portal.type === undefined && portal.block_move === false)) {
+          // Special passages.
+          doors.push(new WallDocument({
+            c: [
+              ((portal.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
+              ((portal.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[1].y - originY) * pixelsPerGrid) + offsetY
+            ],
+            door : CONST.WALL_DOOR_TYPES.NONE,
+            move : CONST.WALL_MOVEMENT_TYPES.NONE,
+            dir : (portal.block_left !== false && portal.block_right !== false) ? CONST.WALL_DIRECTIONS.BOTH : (portal.block_left ? CONST.WALL_DIRECTIONS.LEFT : CONST.WALL_DIRECTIONS.RIGHT),
+            light : portal.block_light  === true ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+            sight : portal.block_vision === true ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+            sound : portal.block_sound  === true ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+          }))
+        } else if (portal.type == "wall" || (portal.type === undefined && portal.block_move === true)) {
+          // Special walls.
+          doors.push(new WallDocument({
+            c: [
+              ((portal.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
+              ((portal.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[1].y - originY) * pixelsPerGrid) + offsetY
+            ],
+            door : CONST.WALL_DOOR_TYPES.NONE,
+            move : CONST.WALL_MOVEMENT_TYPES.NORMAL,
+            dir : (portal.block_left !== false && portal.block_right !== false) ? CONST.WALL_DIRECTIONS.BOTH : (portal.block_left ? CONST.WALL_DIRECTIONS.LEFT : CONST.WALL_DIRECTIONS.RIGHT),
+            light : portal.block_light  !== false ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+            sight : portal.block_vision !== false ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+            sound : portal.block_sound  !== false ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.NONE,
+          }))
+        } else {
+          // Default door logic for original UVTT format that didn't differentiate.
+          doors.push(new WallDocument({
+            c: [
+              ((portal.bounds[0].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[0].y - originY) * pixelsPerGrid) + offsetY,
+              ((portal.bounds[1].x - originX) * pixelsPerGrid) + offsetX,
+              ((portal.bounds[1].y - originY) * pixelsPerGrid) + offsetY
+            ],
+            door: game.settings.get("dd-import", "openableWindows") ? 1 : (portal.closed ? 1 : 0), // If openable windows - all portals should be doors, otherwise, only portals that "block light" should be openable (doors)
+            light : portal.closed ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.PROXIMITY,
+            sight : portal.closed ? CONST.WALL_SENSE_TYPES.NORMAL : CONST.WALL_SENSE_TYPES.PROXIMITY,
+            threshold : portal.closed ? {} : {attenuation : true, light : 10, sight : 10}
+          }))   // Proximity type if portal.closed = false (assumes they are windows)
+        }
       }
       catch(e)
       {
@@ -801,10 +869,10 @@ class DDImporter extends FormApplication {
 
   /**
    * Checks if point is within map crop
-   * 
+   *
    * @param {Object} file uvtt file
    * @param {Object} position {x, y}
-   * @returns 
+   * @returns
    */
   static isWithinMap(file, position) {
 
